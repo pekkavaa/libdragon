@@ -25,7 +25,7 @@ static surface_t zbuffer;
 
 static uint64_t frames = 0;
 
-static GLuint textures[7];
+static GLuint textures[4];
 
 static GLenum shade_model = GL_SMOOTH;
 static bool fog_enabled = false;
@@ -54,30 +54,30 @@ static const GLfloat light_diffuse[8][4] = {
     { 1.0f, 1.0f, 1.0f, 1.0f },
 };
 
-static const char *texture_path[7] = {
-    "rom:/circle0.sprite",
-    "rom:/diamond0.sprite",
-    "rom:/pentagon0.sprite",
+static const char *texture_path[4] = {
+    "rom:/rocky_crop_1_32px_filtered.sprite",
+    "rom:/rocky_crop_1_32px_sharpened.sprite",
+    "rom:/rocky_crop_1_32px_baseline.sprite",
     "rom:/triangle0.sprite",
-    "rom:/stone_baseline.sprite",
-    "rom:/stone_yuverror.sprite",
-    "rom:/stone_ci4.sprite",
 };
 
-#define TEX_INDEX_BASELINE (4)
-#define TEX_INDEX_YUVERROR (5)
-#define TEX_INDEX_CI4 (6)
+static const char *texture_blurbs[4] = {
+    "1. Interpolation-aware sharpening",
+    "2. Regular sharpening",
+    "3. No sharpening",
+    "4. -",
+};
 
-static sprite_t *sprites[7];
+static sprite_t *sprites[4];
 
 void setup()
 {
-    camera.distance = -10.0f;
+    camera.distance = -8.0f;
     camera.rotation = 0.0f;
 
     zbuffer = surface_alloc(FMT_RGBA16, display_get_width(), display_get_height());
 
-    for (uint32_t i = 0; i < 7; i++)
+    for (uint32_t i = 0; i < 4; i++)
     {
         sprites[i] = sprite_load(texture_path[i]);
     }
@@ -123,7 +123,7 @@ void setup()
 
     glEnable(GL_MULTISAMPLE_ARB);
 
-    glGenTextures(7, textures);
+    glGenTextures(4, textures);
 
     #if 0
     GLenum min_filter = GL_LINEAR_MIPMAP_LINEAR;
@@ -132,14 +132,14 @@ void setup()
     #endif
 
 
-    for (uint32_t i = 0; i < 7; i++)
+    for (uint32_t i = 0; i < 4; i++)
     {
         glBindTexture(GL_TEXTURE_2D, textures[i]);
 
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MAG_FILTER, GL_NEAREST);
         glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, min_filter);
 
-        glSpriteTextureN64(GL_TEXTURE_2D, sprites[i], &(rdpq_texparms_t){.s.repeats = 1, .t.repeats = 1});
+        glSpriteTextureN64(GL_TEXTURE_2D, sprites[i], &(rdpq_texparms_t){.s.repeats = REPEAT_INFINITE, .t.repeats = REPEAT_INFINITE});
     }
 }
 
@@ -155,12 +155,8 @@ void set_light_positions(float rotation)
     glPopMatrix();
 }
 
-void render()
+void render(surface_t* disp)
 {
-    surface_t *disp = display_get();
-
-    rdpq_attach(disp, &zbuffer);
-
     gl_context_begin();
 
     glClearColor(environment_color[0], environment_color[1], environment_color[2], environment_color[3]);
@@ -174,7 +170,7 @@ void render()
     set_light_positions(rotation);
 
     // Set some global render modes that we want to apply to all models
-    glEnable(GL_LIGHTING);
+    glDisable(GL_LIGHTING);
     glEnable(GL_NORMALIZE);
     glEnable(GL_DEPTH_TEST);
     glEnable(GL_CULL_FACE);
@@ -182,87 +178,19 @@ void render()
     glEnable(GL_TEXTURE_2D);
     glBindTexture(GL_TEXTURE_2D, textures[texture_index]);
     
-    render_plane();
-    render_decal();
+    // render_plane();
+    // render_decal();
     render_cube();
-    render_skinned(&camera, animation);
+    // render_skinned(&camera, animation);
 
     glBindTexture(GL_TEXTURE_2D, textures[(texture_index + 1)%4]);
-    render_sphere(rotation);
+    // render_sphere(rotation);
 
     glDisable(GL_TEXTURE_2D);
     glDisable(GL_LIGHTING);
-    render_primitives(rotation);
+    // render_primitives(rotation);
 
     gl_context_end();
-
-    rdpq_detach_show();
-
-    rspq_profile_next_frame();
-
-    if (((frames++) % 60) == 0) {
-        rspq_profile_dump();
-        rspq_profile_reset();
-    }
-}
-
-void render_test()
-{
-    surface_t *disp = display_get();
-
-    rdpq_attach(disp, &zbuffer);
-
-    gl_context_begin();
-
-    glClearColor(environment_color[0], environment_color[1], environment_color[2], environment_color[3]);
-    glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
-    glMatrixMode(GL_PROJECTION);
-    glLoadIdentity();
-    //glOrtho(-display_get_width()/2, display_get_width()/2,
-    //    -display_get_height()/2, display_get_height()/2,
-    //    0.0f, 2.0f);
-    //glOrtho(-1, 1, -1, 1, 0, 1.0f);
-    glMatrixMode(GL_MODELVIEW);
-    glLoadIdentity();
-
-    // Set some global render modes that we want to apply to all models
-    glDisable(GL_LIGHTING);
-    glEnable(GL_NORMALIZE);
-    glDisable(GL_DEPTH_TEST);
-    glDisable(GL_CULL_FACE);
-
-    glEnable(GL_TEXTURE_2D);
-
-    for (int idx = 0; idx < 3; idx++) {
-        glBindTexture(GL_TEXTURE_2D, textures[TEX_INDEX_BASELINE + idx]);
-
-        glPushMatrix();
-        glLoadIdentity();
-        float scale = 0.5;
-        glScalef(scale, scale * (display_get_width() / (float)display_get_height()), scale);
-        glTranslatef(-1.0f + 1.1f * (idx%2), 0.5f - 1.1f * (idx/2), 0.f);
-        glBegin(GL_QUADS);
-
-        glVertex2f(0.f, 0.f);
-        glTexCoord2f(1.f, 1.f);
-
-        glVertex2f(1.f, 0.f);
-        glTexCoord2f(1.f, 0.f);
-
-        glVertex2f(1.f, 1.f);
-        glTexCoord2f(0.f, 0.f);
-
-        glVertex2f(0.f, 1.f);
-        glTexCoord2f(0.f, 1.f);
-
-        glEnd();
-        glPopMatrix();
-    }
-
-    gl_context_end();
-
-    rdpq_detach_show();
 
     rspq_profile_next_frame();
 
@@ -353,6 +281,13 @@ int main()
             make_sphere_mesh();
         }
 
+        if (down.c[0].C_left) {
+            if (texture_index == 0) {
+                texture_index = 3;
+            } else {
+                texture_index--;
+            }
+        }
         if (down.c[0].C_right) {
             texture_index = (texture_index + 1) % 4;
         }
@@ -366,7 +301,20 @@ int main()
             camera.rotation = camera.rotation - x * 1.2f;
         }
 
-        render_test();
+        surface_t *disp = display_get();
+        rdpq_attach(disp, &zbuffer);
+
+        render(disp);
+        rdpq_detach();
+        rspq_wait();
+
+        // disp = display_get();
+        graphics_draw_text(disp, 16, 32, texture_blurbs[texture_index]);
+
+        // rdpq_detach_show();
+        display_show(disp);
+
+
         if (DEBUG_RDP)
             rspq_wait();
     }
