@@ -483,6 +483,7 @@ surface_t* display_try_get(void)
             break;
         }
         next = buffer_next(next);
+        __asm("tne $7, $7, 0x1f2"); // emux idle loop instruction
     } while (next != now_showing);
 
     enable_interrupts();
